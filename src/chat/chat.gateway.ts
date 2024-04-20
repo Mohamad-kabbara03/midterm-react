@@ -76,7 +76,12 @@ export class ChatGateway implements OnGatewayConnection {
   async handleSendMessage(
     @ConnectedSocket() client: Socket,
     @MessageBody()
-    { senderId, receiverId, message, sessionId }: {
+    {
+      senderId,
+      receiverId,
+      message,
+      sessionId,
+    }: {
       senderId: number;
       receiverId: number;
       message: string;
@@ -104,23 +109,30 @@ export class ChatGateway implements OnGatewayConnection {
     }
   }
 
-  @SubscribeMessage('callUser')
-  async handleCallUser(
-    @ConnectedSocket() caller: Socket,
-    @MessageBody() data: { userToCall: string, signalData: any, from: string, name: string },
-  ) {
-    console.log(`Calling user: ${data.userToCall}`);
-    caller.broadcast.to(data.userToCall).emit('callUser', data);
+  @SubscribeMessage('offer')
+  async handleOffer(@ConnectedSocket() client: Socket, @MessageBody() data: { offer: RTCSessionDescriptionInit; target: string; senderId: number }): Promise<void> {
+    console.log(`Received offer from ${data.senderId}, forwarding to ${data.target}`);
+    this.server.to(data.target).emit('offer', { from: data.senderId, offer: data.offer });
   }
 
-  @SubscribeMessage('answerCall')
-  async handleAnswerCall(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() data: { to: string, signal: any },
-  ) {
-    console.log(`Answering call from: ${data.to}`);
-    // Emit the 'answerCall' event to the specific recipient ('to') with the signal data
-    client.to(data.to).emit('answerCall', data.signal);
+  @SubscribeMessage('answer')
+  async handleAnswer(@ConnectedSocket() client: Socket, @MessageBody() data: { answer: RTCSessionDescriptionInit; target: string; senderId: number }): Promise<void> {
+    console.log(`Sending answer from ${data.senderId} to: ${data.target}`);
+    this.server.to(`user-${data.target}`).emit('answer', { from: data.senderId, answer: data.answer });
+    console.log(`Answer emitted to user-${data.target}`);
   }
 
+  @SubscribeMessage('ice-candidate')
+  async handleIceCandidate(@ConnectedSocket() client: Socket, @MessageBody() data: { candidate: RTCIceCandidate; target: string; senderId: number }): Promise<void> {
+    console.log(`Sending ICE candidate from ${data.senderId} to: ${data.target}`);
+    this.server.to(data.target).emit('ice-candidate', { from: data.senderId, candidate: data.candidate });
+    console.log(`ICE candidate emitted to user-${data.target}`);
+  }
+
+  @SubscribeMessage('call-user')
+  async handleCallUser(@ConnectedSocket() client: Socket, @MessageBody() data: { target: string; senderId: number }): Promise<void> {
+    console.log(`Call User button clicked by ${data.senderId}, calling user-${data.target}`);
+    this.server.to(`user-${data.target}`).emit('incomingCall', { from: data.senderId });
+    console.log(`Incoming call emitted to user-${data.target}`);
+  }
 }
